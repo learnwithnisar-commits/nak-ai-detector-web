@@ -1,16 +1,20 @@
 # Nixpacks config for NAK AI Detector
 # WeasyPrint needs these system libs for PDF generation
-# NOTE (2026-10-23): nixpkgs python311 no longer ships the pip binary, so the
-# install phase bootstraps a virtualenv first (per Railway's own diagnosis).
+# NOTE (2026-10-23): two nixpkgs python311 quirks fixed here —
+#   1. nixpkgs python311 no longer ships the pip binary -> bootstrap a venv
+#      (per Railway's own diagnosis) and add python311Packages.pip as fallback.
+#   2. nixpkgs python311 ships without CA certificates -> add cacert and point
+#      Python's ssl at the nix-profile bundle so pip's TLS to PyPI verifies.
 
 [phases.setup]
-nixPkgs = ["python311", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
+nixPkgs = ["python311", "python311Packages.pip", "cacert", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
 
 [phases.install]
 cmds = [
   "python3 -m venv /opt/venv",
-  "/opt/venv/bin/pip install --upgrade pip",
-  "/opt/venv/bin/pip install -r requirements.txt",
+  "/opt/venv/bin/pip --version",
+  "if [ -f /root/.nix-profile/etc/ssl/certs/ca-bundle.crt ]; then export SSL_CERT_FILE=/root/.nix-profile/etc/ssl/certs/ca-bundle.crt; fi; /opt/venv/bin/pip install --upgrade pip",
+  "if [ -f /root/.nix-profile/etc/ssl/certs/ca-bundle.crt ]; then export SSL_CERT_FILE=/root/.nix-profile/etc/ssl/certs/ca-bundle.crt; fi; /opt/venv/bin/pip install -r requirements.txt",
 ]
 paths = ["/opt/venv/bin"]
 
