@@ -1,0 +1,186 @@
+{
+  "test_at_0.5": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "fnr": 0.0,
+    "confusion": {
+      "tn": 300,
+      "fp": 0,
+      "fn": 0,
+      "tp": 300
+    }
+  },
+  "per_genre_test": {
+    "academic_paragraph": {
+      "n": 55,
+      "acc": 1.0
+    },
+    "blog_post": {
+      "n": 53,
+      "acc": 1.0
+    },
+    "cover_letter": {
+      "n": 58,
+      "acc": 1.0
+    },
+    "email": {
+      "n": 25,
+      "acc": 1.0
+    },
+    "email_formal": {
+      "n": 28,
+      "acc": 1.0
+    },
+    "email_informal": {
+      "n": 31,
+      "acc": 1.0
+    },
+    "how_to": {
+      "n": 73,
+      "acc": 1.0
+    },
+    "news_report": {
+      "n": 49,
+      "acc": 1.0
+    },
+    "personal_essay": {
+      "n": 63,
+      "acc": 1.0
+    },
+    "product_review": {
+      "n": 50,
+      "acc": 1.0
+    },
+    "short_story_opening": {
+      "n": 22,
+      "acc": 1.0
+    },
+    "social_media_post": {
+      "n": 62,
+      "acc": 1.0
+    },
+    "story_opening": {
+      "n": 31,
+      "acc": 1.0
+    }
+  },
+  "logo_per_genre": {
+    "academic_paragraph": {
+      "n": 55,
+      "acc": 1.0
+    },
+    "blog_post": {
+      "n": 53,
+      "acc": 1.0
+    },
+    "cover_letter": {
+      "n": 58,
+      "acc": 1.0
+    },
+    "email": {
+      "n": 25,
+      "acc": 1.0
+    },
+    "email_formal": {
+      "n": 28,
+      "acc": 1.0
+    },
+    "email_informal": {
+      "n": 31,
+      "acc": 1.0
+    },
+    "how_to": {
+      "n": 73,
+      "acc": 0.9863013698630136
+    },
+    "news_report": {
+      "n": 49,
+      "acc": 1.0
+    },
+    "personal_essay": {
+      "n": 63,
+      "acc": 1.0
+    },
+    "product_review": {
+      "n": 50,
+      "acc": 1.0
+    },
+    "short_story_opening": {
+      "n": 22,
+      "acc": 1.0
+    },
+    "social_media_post": {
+      "n": 62,
+      "acc": 1.0
+    },
+    "story_opening": {
+      "n": 31,
+      "acc": 1.0
+    }
+  },
+  "logo_macro_acc": 0.9989462592202318,
+  "threshold_sweep_oof": [
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.3,
+      "fpr": 0.0
+    },
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.4,
+      "fpr": 0.0
+    },
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.5,
+      "fpr": 0.0
+    },
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.6,
+      "fpr": 0.0
+    },
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.7,
+      "fpr": 0.0
+    },
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.8,
+      "fpr": 0.0
+    },
+    {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "threshold": 0.9,
+      "fpr": 0.0
+    }
+  ],
+  "recommended_threshold": 0.3,
+  "n_features": 187,
+  "winner": "logreg"
+}

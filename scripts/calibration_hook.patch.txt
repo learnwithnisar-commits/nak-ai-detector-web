@@ -1,0 +1,6 @@
+# Patch: wire Turnitin-scale calibration into document scan.
+# Apply ONLY after scripts/validate_mapping.py passes.
+# --- import (add near other app imports) ---
+from app import calibration as _calib
+# --- after: ai_pct = round(sent_sum / sent_count * 100, 1) if sent_count else 0.0 ---
+ai_pct = _calib.calibrate_pct(ai_pct)

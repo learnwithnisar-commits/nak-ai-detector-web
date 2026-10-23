@@ -1,0 +1,11 @@
+# NAK AI Detector - pinned, CPU only, no torch.
+fastapi==0.143.0
+uvicorn==0.54.0
+numpy==2.5.4
+scipy==1.18.1
+scikit-learn==1.9.1
+joblib==1.6.0
+python-docx==1.2.0
+pypdf==6.20.0
+python-multipart==0.0.32
+weasyprint==70.0

@@ -1,0 +1,11 @@
+# Nixpacks config for NAK AI Detector
+# WeasyPrint needs these system libs for PDF generation
+
+[phases.setup]
+nixPkgs = ["python311", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "bash start.sh"
