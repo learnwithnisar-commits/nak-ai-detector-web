@@ -210,7 +210,7 @@ button.ghost {
 .likely_human { color: var(--ok); }
 .uncertain { color: #ca8a04; }
 .barwrap { background: #e2e8f0; border-radius: 10px; height: 22px; overflow: hidden; }
-#bar { height: 100%; width: 0%;
+#bar, #abar { height: 100%; width: 0%;
        background: linear-gradient(90deg, #22c55e, #facc15, #ef4444);
        transition: width .4s; }
 #meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
@@ -857,6 +857,15 @@ reliable score &mdash; shorter texts show a low-confidence notice.</p>
 <div class="err" id="ascanerr"></div><div class="ok" id="ascanok" style="display:none"></div>
 </div>
 <div class="card">
+<h2>Check text</h2>
+<p class="lede">Quick AI-likelihood estimate &mdash; free for admin.</p>
+<textarea id="atext" placeholder="Paste at least 50 characters of text..."></textarea>
+<div class="row"><button id="abtn" onclick="acheck()">Check text</button><span id="acount">0 chars</span></div>
+<div class="err" id="aerr"></div>
+<div id="aresult"><div class="verdict" id="averdict"></div>
+<div class="barwrap"><div id="abar"></div></div><div id="ameta"></div></div>
+</div>
+<div class="card">
 <h2>Client accounts</h2>
 <p class="lede">Create accounts, top up credits, suspend or permanently delete clients.</p>
 {msg_html}{table}</div>
@@ -915,6 +924,37 @@ async function ascan(){
     ok.style.display = 'block';
   } catch (e) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
   btn.disabled = false; btn.textContent = 'Upload & scan';
+}
+const ata = document.getElementById('atext');
+ata.addEventListener('input', () => { document.getElementById('acount').textContent = ata.value.length + ' chars'; });
+function alabels(v){
+  if (v === 'likely_ai') return ['Likely AI-generated', 'likely_ai'];
+  if (v === 'likely_human') return ['Likely human-written', 'likely_human'];
+  return ['Uncertain', 'uncertain'];
+}
+async function acheck(){
+  const err = document.getElementById('aerr');
+  const result = document.getElementById('aresult');
+  const btn = document.getElementById('abtn');
+  err.style.display = 'none'; result.style.display = 'none';
+  const text = ata.value.trim();
+  if (text.length < 50) { err.textContent = 'Please enter at least 50 characters.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Checking...';
+  try {
+    const r = await fetch('/api/detect', { method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text}) });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error || 'Request failed.'; err.style.display = 'block'; return; }
+    const lbl = alabels(d.verdict);
+    const v = document.getElementById('averdict');
+    v.textContent = lbl[0]; v.className = 'verdict ' + lbl[1];
+    document.getElementById('abar').style.width = (d.ai_probability * 100).toFixed(1) + '%';
+    document.getElementById('ameta').textContent =
+      'AI probability: ' + (d.ai_probability * 100).toFixed(1) + '%' +
+      '  |  confidence: ' + d.confidence;
+    result.style.display = 'block';
+  } catch (e) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
+  btn.disabled = false; btn.textContent = 'Check text';
 }
 </script>"""
 
