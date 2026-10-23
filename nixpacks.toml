@@ -1,11 +1,18 @@
 # Nixpacks config for NAK AI Detector
 # WeasyPrint needs these system libs for PDF generation
+# NOTE (2026-10-23): nixpkgs python311 no longer ships the pip binary, so the
+# install phase bootstraps a virtualenv first (per Railway's own diagnosis).
 
 [phases.setup]
 nixPkgs = ["python311", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+  "python3 -m venv /opt/venv",
+  "/opt/venv/bin/pip install --upgrade pip",
+  "/opt/venv/bin/pip install -r requirements.txt",
+]
+paths = ["/opt/venv/bin"]
 
 [start]
 cmd = "bash start.sh"
