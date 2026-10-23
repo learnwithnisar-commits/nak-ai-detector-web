@@ -1,13 +1,13 @@
 # Nixpacks config for NAK AI Detector
 # WeasyPrint needs these system libs for PDF generation
-# NOTE (2026-10-23): two nixpkgs python311 quirks fixed here —
-#   1. nixpkgs python311 no longer ships the pip binary -> bootstrap a venv
-#      (per Railway's own diagnosis) and add python311Packages.pip as fallback.
-#   2. nixpkgs python311 ships without CA certificates -> add cacert and point
-#      Python's ssl at the nix-profile bundle so pip's TLS to PyPI verifies.
+# NOTE (2026-10-23): nixpkgs python311 quirks —
+#   * no pip binary -> install phase bootstraps a venv (per Railway diagnosis).
+#   * no CA certificates -> cacert in nixPkgs + SSL_CERT_FILE export so pip's
+#     TLS to PyPI verifies. (python311Packages.pip removed: it collides with
+#     python311 in the nix profile and breaks nix-env setup.)
 
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "cacert", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
+nixPkgs = ["python311", "cacert", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
 
 [phases.install]
 cmds = [
