@@ -40,7 +40,7 @@ from fastapi.responses import (
 from app import pages, plag as plagmod, store
 from app.parse import ALLOWED_EXTS, parse_document
 from app.scan import assemble_report, count_words, make_submission_id
-from src.features import extract_features
+from src.features import extract_features_unscaled
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = Path(os.environ.get("MODEL_PATH", PROJECT_ROOT / "models" / "nak_detector.joblib"))
@@ -72,7 +72,9 @@ LOGO_PATH = (
     / "media-generation-nak-ai-detector-logo-0-f792afd1-7bc0-47de-821f-2c86a5388273.webp"
 )
 
-model = None  # loaded once at startup
+model = None  # loaded once at startup (legacy v17 path; kept for reference)
+v21_bundle = None  # NAK v21 AI detector (187-dim stylometric + frag rule) — LIVE
+V21_BUNDLE_PATH = PROJECT_ROOT / "models" / "candidates" / "v21_187_bundle.joblib"
 plag_oa: plagmod.OAIndex | None = None  # offline plagiarism reference index
 PLAG_INDEX_PATH = PROJECT_ROOT / "plag_index" / "plag_index.db"
 plag_web: plagmod.OAIndex | None = None  # web academic index (mdpi, frontiersin, etc.)
@@ -185,7 +187,7 @@ def get_plag_web() -> plagmod.OAIndex | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model, plag_oa, plag_web
+    global model, v21_bundle, plag_oa, plag_web
     for d in (DATA_DIR, REPORTS_DIR, UPLOADS_DIR, TMP_DIR):
         d.mkdir(parents=True, exist_ok=True)
     store.init_db(DB_PATH)
@@ -194,6 +196,12 @@ async def lifespan(app: FastAPI):
             model = joblib.load(MODEL_PATH)
         except Exception:
             model = None
+    # NAK v21 AI detector — the live detection model (replaced v17 2026-10-23).
+    if V21_BUNDLE_PATH.exists():
+        try:
+            v21_bundle = joblib.load(V21_BUNDLE_PATH)
+        except Exception:
+            v21_bundle = None
     # Offline plagiarism reference library. Ships with the deploy when small
     # enough; otherwise fetched on first boot via PLAG_INDEX_URL (see
     # _ensure_plag_index). Absent -> similarity falls back to doc-vs-doc.
@@ -349,18 +357,31 @@ def _set_session_cookie(response, username: str):
 
 
 # ---------------------------------------------------------------- detection core
+# NAK v21 (live since 2026-10-23): 187-dim stylometric window LR + frag rule.
+# Per-window p from the v21 bundle; doc AI% = 100*max(p) if frag>0.6 else
+# 100*share(p>=0.5). v17 (RoutedEnsemble, share>=0.9) retired to
+# models/nak_detector_v17_backup.joblib.
 
 def score_text(text: str) -> float:
-    features = extract_features(text)
-    features = np.asarray(features, dtype=np.float64).reshape(1, -1)
-    p = float(model.predict_proba(features)[0][1])
+    """Score one window of text with the v21 model -> P(AI) in [0,1]."""
+    if v21_bundle is None:
+        raise RuntimeError("v21 model bundle not loaded")
+    vec = extract_features_unscaled(text)
+    vec = np.asarray(vec, dtype=np.float64).reshape(1, -1)
+    if vec.shape[1] != 187:
+        fixed = np.zeros((1, 187))
+        n = min(187, vec.shape[1])
+        fixed[:, :n] = vec[:, :n]
+        vec = fixed
+    p = float(v21_bundle["clf"].predict_proba(
+        v21_bundle["scaler"].transform(vec))[0][1])
     return min(max(p, 0.0), 1.0)
 
 
 def verdict_for(p: float) -> str:
-    if p >= 0.7:
+    if p >= 0.6:
         return "likely_ai"
-    if p <= 0.3:
+    if p <= 0.4:
         return "likely_human"
     return "uncertain"
 
@@ -732,7 +753,7 @@ def api_history(request: Request):
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "model_loaded": model is not None}
+    return {"status": "ok", "model_loaded": v21_bundle is not None}
 
 
 @app.get("/assets/logo.webp")
@@ -929,9 +950,15 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
         reset_parts,
         split_sentences,
     )
-    # Turnitin-style doc aggregation threshold (tuned on v2 val 2026-10-17).
-    # Doc AI% = share of sentences with window-mean-p >= AI_DOC_TAU.
-    AI_DOC_TAU = 0.9
+    # NAK v21 doc aggregation (sealed-gate 2026-10-23): every scored window's
+    # P(AI) is recorded; frag = share of scored sentences < 12 words.
+    # frag > 0.6 -> AI% = 100*max(p); else AI% = 100*share(p >= 0.5).
+    window_ps: list[float] = []
+
+    def _recording_score(seg_text: str) -> float:
+        p = score_text(seg_text)
+        window_ps.append(p)
+        return p
 
     reset_parts(TMP_DIR, scan_id)
     total_words = 0
@@ -939,9 +966,6 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
     prose_words = 0
     sent_count = 0
     ai_sent_count = 0
-    # Turnitin-style document aggregation (tuned 2026-10-17): doc % =
-    # share of sentences with window-mean-p >= AI_DOC_TAU (not mean of p).
-    ai_doc_count = 0
     pdf_pages: int | None = None
     if ext == ".pdf":
         # real page count for PDFs; docx/txt get a word-count estimate below
@@ -950,7 +974,7 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
         with open(raw_path, "rb") as _pf:
             pdf_pages = len(PdfReader(_pf).pages)
 
-    scorer = SentenceScorer(score_text)
+    scorer = SentenceScorer(_recording_score)
     para_queue: deque[dict] = deque()  # paragraphs awaiting sentence scores
     para_of: dict[int, dict] = {}  # sentence gidx -> paragraph record
     list_buf: list[dict] = []  # pending same-type list items
@@ -974,15 +998,13 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
             append_block_html(render_prose_paragraph(sents), p["words"], TMP_DIR, scan_id)
 
     def drain_finalized() -> None:
-        nonlocal sent_count, ai_sent_count, ai_doc_count
+        nonlocal sent_count, ai_sent_count
         while scorer.finalized:
             g, s = scorer.finalized.popleft()
             sent_count += 1
             sent_scores[g] = s
             if s >= AI_THRESHOLD:
                 ai_sent_count += 1
-            if s >= AI_DOC_TAU:
-                ai_doc_count += 1
             p = para_of.pop(g)
             p["scores"][g] = s
             p["remaining"] -= 1
@@ -1045,8 +1067,19 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
         reset_parts(TMP_DIR, scan_id)
         raise
 
-    # Turnitin-style aggregation: % of sentences with p >= AI_DOC_TAU.
-    ai_pct = round(ai_doc_count / sent_count * 100, 1) if sent_count else 0.0
+    # NAK v21 aggregation: frag = share of scored sentences < 12 words.
+    # frag > 0.6 -> AI% = 100*max(window p); else 100*share(window p >= 0.5).
+    n_scored = len(sent_texts)
+    frag = (sum(1 for t in sent_texts.values() if len(t.split()) < 12)
+            / n_scored) if n_scored else 0.0
+    if window_ps:
+        if frag > 0.6:
+            ai_pct = round(100.0 * max(window_ps), 1)
+        else:
+            ai_pct = round(100.0 * sum(1 for p in window_ps if p >= 0.5)
+                           / len(window_ps), 1)
+    else:
+        ai_pct = 0.0
     # AI minimum-words condition (Turnitin parity, default 300): below the
     # threshold the AI section is not scored at all -- but plagiarism still
     # runs fully. Never affects plagiarism.

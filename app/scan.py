@@ -19,7 +19,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 AI_HIGHLIGHT = "#B9E8F0"  # locked - do not change
-AI_THRESHOLD = 0.7
+AI_THRESHOLD = 0.5
 SEGMENT_WINDOW = 8  # sentences per scoring segment
 SEGMENT_STRIDE = 4  # sliding-window stride (each sentence covered by ~2 segments)
 MIN_PROSE_WORDS = 300  # below this, detection is flagged as unreliable
@@ -126,7 +126,7 @@ class SentenceScorer:
 
 
 def render_prose_paragraph(sentences: list[tuple[str, float]]) -> str:
-    """Render a prose paragraph; sentences scoring >= 0.7 get highlighted."""
+    """Render a prose paragraph; sentences scoring >= 0.5 get highlighted."""
     parts = []
     for text, score in sentences:
         e = _escape(text)
