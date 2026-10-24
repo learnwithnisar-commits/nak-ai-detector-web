@@ -109,6 +109,98 @@ def quote_exclusion_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
+# In-text citation forms: (Smith, 2019), (Smith & Jones, 2020),
+# (Smith et al., 2021), Smith (2019), Smith et al. (2021), [1], [1, 2], [1-3].
+_CITATION_PATTERNS = (
+    re.compile(r"\([A-Z][A-Za-z'’\-]+(?:\s+(?:&|and)\s+[A-Z][A-Za-z'’\-]+)?"
+               r"(?:\s+et al\.)?,?\s+\d{4}[a-z]?\)"),
+    re.compile(r"[A-Z][A-Za-z'’\-]+(?:\s+et al\.)?\s+\(\d{4}[a-z]?\)"),
+    re.compile(r"\[\d+\s*(?:[,\-–]\s*\d+\s*)*\]"),
+)
+
+
+def _regions_to_word_spans(text: str,
+                           regions: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Map char ranges to merged kept-word-index spans (split_keep coords)."""
+    if not regions:
+        return []
+    regions = sorted(regions)
+    excl: list[int] = []
+    idx = 0
+    wi = 0
+    for w in text.split():
+        s = text.find(w, idx)
+        if s < 0:
+            break
+        e = s + len(w)
+        idx = e
+        if not norm_word(w):
+            continue
+        if any(s < re_ and e > rs for rs, re_ in regions):
+            excl.append(wi)
+        wi += 1
+    if not excl:
+        return []
+    spans: list[tuple[int, int]] = []
+    ms = ps = excl[0]
+    for x in excl[1:]:
+        if x == ps + 1:
+            ps = x
+        else:
+            spans.append((ms, ps + 1))
+            ms = ps = x
+    spans.append((ms, ps + 1))
+    return spans
+
+
+def cited_exclusion_spans(text: str) -> list[tuple[int, int]]:
+    """Merged (start, end) word-index spans (split_keep norm coordinates)
+    covering in-text citations inside one block."""
+    regions: list[tuple[int, int]] = []
+    for pat in _CITATION_PATTERNS:
+        for m in pat.finditer(text):
+            regions.append((m.start(), m.end()))
+    return _regions_to_word_spans(text, regions)
+
+
+def _union_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Union of spans: merge overlapping or directly adjacent ranges only
+    (no gap tolerance -- unlike _merge_spans)."""
+    if not spans:
+        return []
+    out: list[tuple[int, int]] = []
+    cs, ce = sorted(spans)[0]
+    for s, e in sorted(spans)[1:]:
+        if s <= ce:
+            ce = max(ce, e)
+        else:
+            out.append((cs, ce))
+            cs, ce = s, e
+    out.append((cs, ce))
+    return out
+
+
+def _filter_small_matches(block_src: dict, sources: dict,
+                          threshold: int) -> int:
+    """Drop merged per-source passages shorter than threshold words
+    (words mode). Mutates block_src and sources spans in place so ranking,
+    rendering and span details all see the filtered passages. Returns the
+    number of words removed."""
+    removed = 0
+    for bi, per_src in block_src.items():
+        for key in list(per_src):
+            merged = _merge_spans(per_src[key])
+            kept = [(ms, me) for ms, me in merged if (me - ms) >= threshold]
+            removed += sum(me - ms for ms, me in merged
+                           if (me - ms) < threshold)
+            per_src[key] = kept
+    for key, s in sources.items():
+        s["spans"] = [(bi, ms, me)
+                      for bi, per_src in block_src.items()
+                      for (ms, me) in per_src.get(key, [])]
+    return removed
+
+
 def _clip_spans(spans: list[tuple[int, int]],
                 excl: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """Remove excluded ranges from (start, end) spans."""
@@ -417,6 +509,8 @@ def match_blocks(
 def _empty_result(total_words: int) -> dict:
     return {
         "total_words": total_words, "excluded_words": 0,
+        "quote_excluded_words": 0, "cited_excluded_words": 0,
+        "small_filtered_words": 0,
         "sim_pct": 0.0, "lib_pct": 0.0, "doc_pct": 0.0,
         "sources": [], "block_spans": {}, "block_words": [], "query_fps": [],
         "span_details": [],
@@ -760,11 +854,13 @@ def _sim_manifest_path(tmp_dir, scan_id):
     return Path(tmp_dir) / f"{scan_id}.simmanifest.jsonl"
 
 
-def write_plag_block(text: str, tmp_dir, scan_id, exclude_quotes: bool = False) -> None:
+def write_plag_block(text: str, tmp_dir, scan_id, exclude_quotes: bool = False,
+                     exclude_cited: bool = False) -> None:
     """Append one raw-text block during the parse loop (temp file, streaming).
 
-    With exclude_quotes, quoted spans are recorded alongside the block so the
-    similarity pass can skip them (not counted, not highlighted).
+    With exclude_quotes / exclude_cited, quoted / cited spans are recorded
+    alongside the block so the similarity pass can skip them (not counted,
+    not highlighted).
     """
     import json
 
@@ -775,6 +871,10 @@ def write_plag_block(text: str, tmp_dir, scan_id, exclude_quotes: bool = False) 
         excl = quote_exclusion_spans(text)
         if excl:
             rec["excl"] = excl
+    if exclude_cited:
+        cexcl = cited_exclusion_spans(text)
+        if cexcl:
+            rec["excl_cited"] = cexcl
     p = _pb_path(tmp_dir, scan_id)
     Path(tmp_dir).mkdir(parents=True, exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
@@ -807,7 +907,11 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
                    oa_index: OAIndex | None,
                    doc_lookup_fn,
                    record_doc_fn,
-                   exclude_quotes: bool = False) -> dict:
+                   exclude_quotes: bool = False,
+                   exclude_cited: bool = False,
+                   exclude_small: bool = False,
+                   small_threshold: int = 8,
+                   small_mode: str = "words") -> dict:
     """Full plagiarism pass over the temp block file.
 
     1. Stream blocks -> winnowing fingerprints (temp fps file).
@@ -817,8 +921,11 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
     5. Record this document's fingerprints for future doc-vs-doc (after
        matching, so it never matches itself) -- unless record_doc_fn is
        None ("no repository" mode).
-    Quoted spans (when exclude_quotes) are clipped from every match span:
-    not counted in the similarity %, not highlighted.
+    Quoted spans (when exclude_quotes) and cited spans (when exclude_cited)
+    are clipped from every match span: not counted in the similarity %,
+    not highlighted. Small matches (when exclude_small) are dropped: in
+    words mode, merged passages shorter than small_threshold words; in
+    percentage mode, sources contributing below small_threshold percent.
     Returns the result dict (stats + ranked sources).
     """
     import bisect
@@ -835,6 +942,8 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
     block_nwords: list[int] = []
     block_excl: dict[int, list[tuple[int, int]]] = {}
     excluded_words = 0
+    quote_excluded_words = 0
+    cited_excluded_words = 0
     gpos = 0
     pf = _pf_path(tmp_dir, scan_id)
     with open(pb, encoding="utf-8") as bf, open(pf, "w", encoding="utf-8") as ff:
@@ -849,11 +958,17 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
                 continue
             _orig, norm = split_keep(text)
             bi = len(block_starts)
-            if exclude_quotes:
-                excl = [tuple(x) for x in rec.get("excl", [])]
-                if excl:
-                    block_excl[bi] = excl
-                    excluded_words += sum(e - s for s, e in excl)
+            if exclude_quotes or exclude_cited:
+                q = ([tuple(x) for x in rec.get("excl", [])]
+                     if exclude_quotes else [])
+                c = ([tuple(x) for x in rec.get("excl_cited", [])]
+                     if exclude_cited else [])
+                quote_excluded_words += sum(e - s for s, e in q)
+                cited_excluded_words += sum(e - s for s, e in c)
+                combined = _union_spans(q + c)
+                if combined:
+                    block_excl[bi] = combined
+                    excluded_words += sum(e - s for s, e in combined)
             block_starts.append(gpos)
             block_nwords.append(len(norm))
             for t in norm:
@@ -931,6 +1046,14 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
             for doc_ref, fname in doc_hits.get(h, ()):
                 add_hit(("doc", doc_ref), "upload", fname or doc_ref, gs)
 
+    # ---- small-match filter, words mode: drop short merged passages ----
+    # Applied here so ranking words, rendering, span details and the
+    # similarity % all see the same filtered passages.
+    small_filtered_words = 0
+    if exclude_small and small_mode == "words":
+        small_filtered_words = _filter_small_matches(
+            block_src, sources, small_threshold)
+
     # ---- aggregate, rank, color ----
     ranked = []
     for key, s in sources.items():
@@ -955,6 +1078,17 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
         r["color_idx"] = ci
         r["category"] = _source_category(r["kind"], r["label"])
         r["pct"] = round(r["words"] / eff_words * 100, 1)
+    if exclude_small and small_mode == "percentage":
+        # Drop sources below the percentage threshold; rendering,
+        # span details and the similarity % follow keep_keys/key_to_ci.
+        keep = {r["key"] for r in ranked if r["pct"] >= small_threshold}
+        small_filtered_words += sum(r["words"] for r in ranked
+                                    if r["key"] not in keep)
+        ranked = [r for r in ranked if r["key"] in keep]
+        keep_keys = keep
+        for ci, r in enumerate(ranked):
+            r["color"] = PLAG_COLORS[ci % len(PLAG_COLORS)]
+            r["color_idx"] = ci
     key_to_ci = {r["key"]: r["color_idx"] for r in ranked}
 
     matched_global: set[int] = set()
@@ -1061,6 +1195,9 @@ def run_plagiarism(scan_id: str, filename: str, tmp_dir,
     return {
         "total_words": total_words,
         "excluded_words": excluded_words,
+        "quote_excluded_words": quote_excluded_words,
+        "cited_excluded_words": cited_excluded_words,
+        "small_filtered_words": small_filtered_words,
         "sim_pct": sim_pct,
         "lib_pct": round(lib_words / eff_words * 100, 1),
         "doc_pct": round(doc_words / eff_words * 100, 1),
