@@ -923,7 +923,11 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
                     exclude_bibliography: bool = False,
                     exclude_quotes: bool = False,
                     ai_min_words: int = 300,
-                    owner: str = "") -> dict:
+                    owner: str = "",
+                    exclude_cited: bool = False,
+                    exclude_small: bool = False,
+                    small_threshold: int = 8,
+                    small_mode: str = "words") -> dict:
     """Parse -> sentence-split prose -> sliding-window score -> report parts.
 
     Runs in a worker thread. Fully streaming: the parser yields units one at
@@ -1037,7 +1041,8 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
                     plag_text = ""
             if plag_text.strip():
                 plagmod.write_plag_block(plag_text, TMP_DIR, scan_id,
-                                         exclude_quotes=exclude_quotes)
+                                         exclude_quotes=exclude_quotes,
+                                         exclude_cited=exclude_cited)
                 plag_blocks.append(plag_text)
             if tag in ("li-bullet", "li-number"):
                 if list_buf and list_buf[0]["tag"] != tag:
@@ -1138,6 +1143,10 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
             record_doc_fn=(lambda ref, fn, words, fps: store.record_doc_fps(
                 DB_PATH, ref, fn, words, fps, owner)) if store_repo else None,
             exclude_quotes=exclude_quotes,
+            exclude_cited=exclude_cited,
+            exclude_small=exclude_small,
+            small_threshold=small_threshold,
+            small_mode=small_mode,
         )
     except Exception:
         plag_result = plagmod._empty_result(0)
@@ -1193,10 +1202,17 @@ def _scan_file_sync(raw_path: Path, ext: str, scan_id: str, filename: str,
         "sim_doc_pct": plag_result["doc_pct"],
         "sim_sources": plag_result["sources"],
         "bib_excluded": bib_excluded_words,
-        "quote_excluded": plag_result.get("excluded_words", 0),
+        "quote_excluded": plag_result.get(
+            "quote_excluded_words", plag_result.get("excluded_words", 0)),
+        "cited_excluded": plag_result.get("cited_excluded_words", 0),
+        "small_filtered": plag_result.get("small_filtered_words", 0),
         "store_repo": store_repo,
         "exclude_bibliography": exclude_bibliography,
         "exclude_quotes": exclude_quotes,
+        "exclude_cited": exclude_cited,
+        "exclude_small": exclude_small,
+        "small_threshold": small_threshold,
+        "small_mode": small_mode,
     }
 
 
@@ -1218,6 +1234,11 @@ async def scan_document(request: Request):
     #                         (default OFF -- no repository)
     #   exclude_bibliography=1  plagiarism only: skip References section
     #   exclude_quotes=1        plagiarism only: skip quoted text
+    #   exclude_cited=1         plagiarism only: skip in-text citations
+    #   exclude_small=1         plagiarism only: drop small matches
+    #   small_threshold=N       words mode: 8-250 (default 8);
+    #                           percentage mode: 1-100 (default 1)
+    #   small_mode=words|percentage  small-match threshold unit
     #   ai_min_words=N         per-scan override of the AI minimum-words
     #                         threshold (default from settings, 300)
     qp = request.query_params
@@ -1230,10 +1251,18 @@ async def scan_document(request: Request):
             return int(str(raw).strip())
         except (ValueError, TypeError):
             return None
+    def _str_param(name: str, fields: dict | None = None) -> str | None:
+        raw = (fields or {}).get(name, "") or qp.get(name, "")
+        raw = str(raw).strip().lower()
+        return raw or None
     # query params read here; multipart text fields merged after upload parse
     store_repo = _flag("store_repo")
     exclude_bibliography = _flag("exclude_bibliography")
     exclude_quotes = _flag("exclude_quotes")
+    exclude_cited = _flag("exclude_cited")
+    exclude_small = _flag("exclude_small")
+    small_mode_raw = _str_param("small_mode")
+    small_threshold_raw = _int_param("small_threshold")
     ai_min_words_override = _int_param("ai_min_words")
 
     scan_id = secrets.token_urlsafe(16)
@@ -1252,6 +1281,19 @@ async def scan_document(request: Request):
     store_repo = _flag("store_repo", fields)
     exclude_bibliography = _flag("exclude_bibliography", fields)
     exclude_quotes = _flag("exclude_quotes", fields)
+    exclude_cited = _flag("exclude_cited", fields)
+    exclude_small = _flag("exclude_small", fields)
+    _sm = _str_param("small_mode", fields)
+    if _sm is not None:
+        small_mode_raw = _sm
+    _st = _int_param("small_threshold", fields)
+    if _st is not None:
+        small_threshold_raw = _st
+    small_mode = small_mode_raw if small_mode_raw in ("words", "percentage") else "words"
+    if small_mode == "words":
+        small_threshold = min(250, max(8, small_threshold_raw if small_threshold_raw is not None else 8))
+    else:
+        small_threshold = min(100, max(1, small_threshold_raw if small_threshold_raw is not None else 1))
     _mw = _int_param("ai_min_words", fields)
     if _mw is not None:
         ai_min_words_override = _mw
@@ -1278,6 +1320,8 @@ async def scan_document(request: Request):
             _scan_file_sync, raw_path, ext, scan_id, filename,
             store_repo, exclude_bibliography, exclude_quotes,
             ai_min_words, user["username"],
+            exclude_cited=exclude_cited, exclude_small=exclude_small,
+            small_threshold=small_threshold, small_mode=small_mode,
         )
     except ValueError as e:
         raw_path.unlink(missing_ok=True)
@@ -1324,6 +1368,8 @@ async def scan_document(request: Request):
         store_repo=stats["store_repo"],
         bib_excluded=stats["bib_excluded"],
         quote_excluded=stats["quote_excluded"],
+        cited_excluded=stats["cited_excluded"],
+        small_filtered=stats["small_filtered"],
     )
     # Admin scans are unlimited: never decrement, never block.
     # Service API keys: 1 credit per completed scan (peeked at auth above;
@@ -1345,6 +1391,8 @@ async def scan_document(request: Request):
         "stored_in_repository": stats["store_repo"],
         "bibliography_excluded_words": stats["bib_excluded"],
         "quotes_excluded_words": stats["quote_excluded"],
+        "citations_excluded_words": stats["cited_excluded"],
+        "small_matches_filtered_words": stats["small_filtered"],
         "similarity_sources": [
             {"label": s["label"], "kind": s["kind"], "percent": s["pct"],
              "matched_words": s["words"], "color": s["color"],
