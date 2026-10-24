@@ -22,6 +22,7 @@ import asyncio
 import os
 import re
 import secrets
+import shutil
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -37,7 +38,7 @@ from fastapi.responses import (
     Response,
 )
 
-from app import pages, plag as plagmod, store
+from app import codecheck as codecheckmod, pages, plag as plagmod, store
 from app.parse import ALLOWED_EXTS, parse_document
 from app.scan import assemble_report, count_words, make_submission_id
 from src.features import extract_features_unscaled
@@ -753,7 +754,8 @@ def api_history(request: Request):
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "model_loaded": v21_bundle is not None}
+    return {"status": "ok", "model_loaded": v21_bundle is not None,
+            "codecheck_available": shutil.which("dolos") is not None}
 
 
 @app.get("/assets/logo.webp")
@@ -1408,6 +1410,53 @@ async def scan_document(request: Request):
 
 
 # ---------------------------------------------------------------- report
+
+@app.post("/api/codecheck")
+async def code_check(request: Request):
+    """Source-code similarity check via Dolos. 1 credit per completed
+    check (admin free), mirroring /api/detect and /api/scan."""
+    user, is_admin, err = _require_client_or_admin(request)
+    if err:
+        return err
+    if not is_admin and int(user.get("credits", 0)) < 1:
+        return JSONResponse(
+            status_code=402,
+            content={"error": "Out of credits - contact admin to top up."},
+        )
+    try:
+        form = await request.form()
+    except Exception:
+        return JSONResponse(status_code=422, content={"error": "invalid upload"})
+    uploads = form.getlist("files")
+    language = str(form.get("language") or "auto")
+    files = []
+    total_raw = 0
+    for up in uploads:
+        name = getattr(up, "filename", "") or "file"
+        try:
+            raw = await up.read()
+        except Exception:
+            continue
+        if len(raw) > codecheckmod.MAX_FILE_BYTES:
+            return JSONResponse(
+                status_code=422, content={"error": f"{name} exceeds 2MB"})
+        total_raw += len(raw)
+        if total_raw > codecheckmod.MAX_TOTAL_BYTES:
+            return JSONResponse(
+                status_code=422, content={"error": "files exceed 10MB total"})
+        files.append((name, raw.decode("utf-8", errors="replace")))
+    result = await asyncio.to_thread(codecheckmod.run_codecheck, files, language)
+    if "error" in result:
+        return JSONResponse(status_code=result.get("status", 500),
+                            content={"error": result["error"]})
+    credits_remaining = None
+    if not is_admin and not user.get("is_service_key"):
+        credits_remaining = store.add_credits(DB_PATH, user["username"], -1)
+    elif user.get("is_service_key"):
+        store.use_api_key_credit(DB_PATH, user["service_key"]["key_id"])
+    result["credits_remaining"] = credits_remaining
+    return result
+
 
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: str, request: Request, download: int = 0):
