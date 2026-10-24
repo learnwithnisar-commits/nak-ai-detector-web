@@ -302,6 +302,8 @@ def assemble_report(
     store_repo: bool = False,
     bib_excluded: int = 0,
     quote_excluded: int = 0,
+    cited_excluded: int = 0,
+    small_filtered: int = 0,
     ai_status: str = "scored",
     ai_min_words: int = 300,
 ) -> Path:
@@ -344,6 +346,14 @@ def assemble_report(
     if quote_excluded > 0:
         sim_notes.append(
             f"Quoted text excluded ({quote_excluded:,} words) — not counted "
+            "in the similarity %, not highlighted.")
+    if cited_excluded > 0:
+        sim_notes.append(
+            f"Cited text excluded ({cited_excluded:,} words) — not counted "
+            "in the similarity %, not highlighted.")
+    if small_filtered > 0:
+        sim_notes.append(
+            f"Small matches excluded ({small_filtered:,} words) — not counted "
             "in the similarity %, not highlighted.")
 
     # Collect pages as (kind, kind_label, body); kinds: details / ai / sim
