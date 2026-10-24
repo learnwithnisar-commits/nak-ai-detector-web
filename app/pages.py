@@ -521,6 +521,12 @@ def dashboard(user: dict, error: str = "") -> str:
 <span>Exclude bibliography<em>Plagiarism only &mdash; references are not counted or highlighted.</em></span></label>
 <label class="check"><input type="checkbox" id="opt_quo" name="exclude_quotes">
 <span>Exclude quoted text<em>Plagiarism only &mdash; quoted passages are not counted or highlighted.</em></span></label>
+<label class="check"><input type="checkbox" id="opt_cit" name="exclude_cited">
+<span>Exclude cited text<em>Plagiarism only &mdash; in-text citations like (Smith, 2019) are not counted or highlighted.</em></span></label>
+<label class="check"><input type="checkbox" id="opt_small" name="exclude_small">
+<span>Exclude small matches<em>Plagiarism only &mdash; matches below a threshold are not counted or highlighted.</em></span></label>
+<div class="keyform"><input type="number" id="opt_small_n" value="8" min="8" max="250" aria-label="Small match threshold">
+<select id="opt_small_mode" aria-label="Threshold unit"><option value="words" selected>words</option><option value="percentage">percentage</option></select></div>
 <p class="opt-note">Note: AI detection needs at least <b>300 words</b> of prose for a
 reliable score &mdash; shorter texts show a low-confidence notice.</p>
 <div class="row"><button id="scanbtn" onclick="scan()">Upload &amp; scan</button></div>
@@ -635,6 +641,12 @@ async function scan(){
     if (document.getElementById('opt_repo').checked) fd.append('store_repo', 'on');
     if (document.getElementById('opt_bib').checked) fd.append('exclude_bibliography', 'on');
     if (document.getElementById('opt_quo').checked) fd.append('exclude_quotes', 'on');
+    if (document.getElementById('opt_cit').checked) fd.append('exclude_cited', 'on');
+    if (document.getElementById('opt_small').checked) {
+      fd.append('exclude_small', 'on');
+      fd.append('small_threshold', document.getElementById('opt_small_n').value);
+      fd.append('small_mode', document.getElementById('opt_small_mode').value);
+    }
     const r = await fetch('/api/scan', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) { err.textContent = d.error || 'Scan failed.'; err.style.display = 'block'; return; }
@@ -851,6 +863,12 @@ New scans are <b>not</b> stored unless the client ticks "Save to document reposi
 <span>Exclude bibliography<em>Plagiarism only &mdash; references are not counted or highlighted.</em></span></label>
 <label class="check"><input type="checkbox" id="aopt_quo" name="exclude_quotes">
 <span>Exclude quoted text<em>Plagiarism only &mdash; quoted passages are not counted or highlighted.</em></span></label>
+<label class="check"><input type="checkbox" id="aopt_cit" name="exclude_cited">
+<span>Exclude cited text<em>Plagiarism only &mdash; in-text citations like (Smith, 2019) are not counted or highlighted.</em></span></label>
+<label class="check"><input type="checkbox" id="aopt_small" name="exclude_small">
+<span>Exclude small matches<em>Plagiarism only &mdash; matches below a threshold are not counted or highlighted.</em></span></label>
+<div class="keyform"><input type="number" id="aopt_small_n" value="8" min="8" max="250" aria-label="Small match threshold">
+<select id="aopt_small_mode" aria-label="Threshold unit"><option value="words" selected>words</option><option value="percentage">percentage</option></select></div>
 <p class="opt-note">Note: AI detection needs at least <b>300 words</b> of prose for a
 reliable score &mdash; shorter texts show a low-confidence notice.</p>
 <div class="row"><button id="ascanbtn" onclick="ascan()">Upload &amp; scan</button></div>
@@ -913,6 +931,12 @@ async function ascan(){
     if (document.getElementById('aopt_repo').checked) fd.append('store_repo', 'on');
     if (document.getElementById('aopt_bib').checked) fd.append('exclude_bibliography', 'on');
     if (document.getElementById('aopt_quo').checked) fd.append('exclude_quotes', 'on');
+    if (document.getElementById('aopt_cit').checked) fd.append('exclude_cited', 'on');
+    if (document.getElementById('aopt_small').checked) {
+      fd.append('exclude_small', 'on');
+      fd.append('small_threshold', document.getElementById('aopt_small_n').value);
+      fd.append('small_mode', document.getElementById('aopt_small_mode').value);
+    }
     const r = await fetch('/api/scan', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) { err.textContent = d.error || 'Scan failed.'; err.style.display = 'block'; return; }
