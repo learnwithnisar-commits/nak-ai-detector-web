@@ -547,9 +547,22 @@ reliable score &mdash; shorter texts show a low-confidence notice.</p>
 <div class="barwrap"><div id="bar"></div></div><div id="meta"></div></div>
 </div>
 <div class="card">
+<h2>Check code</h2>
+<p class="lede">Source-code plagiarism check (Dolos) &mdash; 1 credit per check. Upload 2+ code files; copies are caught even when variable names are changed.</p>
+<label class="drop" for="codefiles"><span class="drop-ic">&#128196;</span>
+<span><b>Choose code files</b><br>
+<span class="muted">.py / .js / .ts / .java / .c / .cpp / .go / .rs / .php &mdash; up to 50 files, 2MB each</span></span></label>
+<input type="file" id="codefiles" class="filehidden" multiple accept=".py,.js,.jsx,.ts,.tsx,.java,.c,.h,.cpp,.cc,.go,.rs,.php,.cs,.scala">
+<div class="filename" id="codefilename"></div>
+<div class="keyform"><select id="codelang" aria-label="Language"><option value="auto" selected>Auto-detect language</option><option value="python">Python</option><option value="javascript">JavaScript</option><option value="typescript">TypeScript</option><option value="java">Java</option><option value="c">C</option><option value="cpp">C++</option><option value="go">Go</option><option value="rust">Rust</option><option value="php">PHP</option></select></div>
+<div class="row"><button id="codebtn" onclick="codecheck()">Check code</button></div>
+<div class="err" id="codeerr"></div><div class="ok" id="codeok" style="display:none"></div>
+<div id="coderesults"></div>
+</div>
+<div class="card">
 <h2>API access</h2>
 <p class="lede">Integrate NAK AI Detector with your own tools via the API
-(<b>POST /api/detect</b> and <b>POST /api/scan</b> with your key as the
+(<b>POST /api/detect</b>, <b>POST /api/scan</b> and <b>POST /api/codecheck</b> with your key as the
 <b>X-API-Key</b> header).</p>
 <p class="muted">Your personal API key was shared with you when your account was
 created. Contact the admin if you need it again &mdash; keys are never shown here.</p>
@@ -659,6 +672,42 @@ async function scan(){
     loadHistory();
   } catch (e) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
   btn.disabled = false; btn.textContent = 'Upload & scan';
+}
+const cf = document.getElementById('codefiles');
+cf.addEventListener('change', () => {
+  document.getElementById('codefilename').textContent =
+    cf.files.length ? 'Selected: ' + cf.files.length + ' file(s)' : '';
+});
+async function codecheck(){
+  const err = document.getElementById('codeerr');
+  const ok = document.getElementById('codeok');
+  const res = document.getElementById('coderesults');
+  const btn = document.getElementById('codebtn');
+  err.style.display = 'none'; ok.style.display = 'none'; res.innerHTML = '';
+  if (cf.files.length < 2) { err.textContent = 'Upload at least 2 code files.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Checking...';
+  try {
+    const fd = new FormData();
+    for (const f of cf.files) fd.append('files', f);
+    const lang = document.getElementById('codelang').value;
+    if (lang && lang !== 'auto') fd.append('language', lang);
+    const r = await fetch('/api/codecheck', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error || 'Code check failed.'; err.style.display = 'block'; return; }
+    if (!d.pairs || !d.pairs.length) { ok.textContent = 'No similar pairs found.'; ok.style.display = 'block'; return; }
+    let h = '<div class="twrap"><table class="admin hist"><thead><tr><th>File A</th><th>File B</th><th>Similarity</th><th>Overlap</th></tr></thead><tbody>';
+    d.pairs.forEach(function(p){
+      const cls = p.similarity >= 0.7 ? 'likely_ai' : (p.similarity >= 0.4 ? 'uncertain' : 'likely_human');
+      h += '<tr><td><b>' + esc(p.left) + '</b></td><td><b>' + esc(p.right) + '</b></td>'
+        + '<td><span class="verdict ' + cls + '">' + p.similarity_pct.toFixed(1) + '%</span></td>'
+        + '<td>' + p.overlap + ' frags</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    res.innerHTML = h;
+    ok.textContent = 'Code check complete: ' + d.pairs.length + ' pair(s) compared. Credits left: ' + d.credits_remaining;
+    ok.style.display = 'block';
+  } catch (e) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
+  btn.disabled = false; btn.textContent = 'Check code';
 }
 </script>"""
     return _page("Dashboard", head + script, right)
