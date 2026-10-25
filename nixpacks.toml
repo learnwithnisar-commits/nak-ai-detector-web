@@ -2,10 +2,11 @@
 # WeasyPrint needs these system libs for PDF generation
 
 [phases.setup]
-nixPkgs = ["python311", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt", "nodejs", "gcc", "gnumake"]
+nixPkgs = ["python311", "pango", "cairo", "gdk-pixbuf", "libffi", "libxml2", "libxslt"]
+aptPkgs = ["build-essential"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt", "npm config set prefix /opt/npm-global && npm install -g @dodona/dolos"]
+cmds = ["python3 -m pip install -r requirements.txt", "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.gz', '/tmp/node.tar.gz')\"", "mkdir -p /opt/node && tar -xzf /tmp/node.tar.gz -C /opt/node --strip-components=1", "export PATH=\"/opt/node/bin:$PATH\" && npm config set prefix /opt/npm-global && npm install -g @dodona/dolos"]
 
 [start]
 cmd = "bash start.sh"
