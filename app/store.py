@@ -591,3 +591,13 @@ def list_user_scans(db_path: Path, username: str, limit: int = 50) -> list[dict]
             " WHERE owner = ? ORDER BY created_at DESC LIMIT ?",
             (username, limit)).fetchall()
     return [dict(r) for r in rows]
+
+
+def list_all_scans(db_path: Path, limit: int = 100) -> list[dict]:
+    """All recent scans, newest first (admin view only; read-only SELECT)."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT scan_id, owner, filename, ai_pct, sim_pct, created_at"
+            " FROM scans ORDER BY created_at DESC LIMIT ?",
+            (limit,)).fetchall()
+    return [dict(r) for r in rows]
