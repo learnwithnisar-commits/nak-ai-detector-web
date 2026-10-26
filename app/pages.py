@@ -273,6 +273,78 @@ table.admin input[type=number] { width: 76px; margin: 0; padding: 8px 10px; font
 .status { font-size: 12.5px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
 .status.on { background: #dcfce7; color: #166534; }
 .status.off { background: #fee2e2; color: #991b1b; }
+/* ---------- professional dashboard ---------- */
+.wrap.wide { max-width: 1080px; }
+.dashhead { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.dashhead h2 { margin: 0; font-size: 24px; letter-spacing: .1px; }
+.dashhead .lede { margin: 0; }
+.statrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 18px; }
+.stat {
+  background: linear-gradient(180deg, #f0f9ff, #ffffff);
+  border: 1px solid #bae6fd;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.stat b { display: block; font-size: 22px; color: var(--brand-dark); line-height: 1.2; }
+.stat span { font-size: 12.5px; color: var(--muted); font-weight: 600;
+             text-transform: uppercase; letter-spacing: .4px; }
+.card h2 .tag {
+  float: right; font-size: 12px; font-weight: 700; color: var(--brand-dark);
+  background: var(--brand-soft); border: 1px solid #bae6fd; border-radius: 999px;
+  padding: 4px 11px; letter-spacing: .2px;
+}
+/* upload preview card (shown before Submit activates) */
+.preview {
+  border: 1.5px solid #bae6fd;
+  background: linear-gradient(180deg, #f0f9ff, #ffffff);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin: 12px 0 4px;
+}
+.preview h3 { margin: 0 0 10px; font-size: 16px; }
+.preview h3 .oktick { color: var(--ok); }
+.pv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pv-stat { background: #fff; border: 1px solid var(--line); border-radius: 10px;
+           padding: 10px 12px; }
+.pv-stat b { display: block; font-size: 18px; color: var(--ink); line-height: 1.25;
+             word-break: break-all; }
+.pv-stat span { font-size: 12px; color: var(--muted); font-weight: 600;
+                text-transform: uppercase; letter-spacing: .4px; }
+.pv-file { font-size: 14px; font-weight: 600; word-break: break-all; margin-bottom: 10px; }
+.pv-file .muted { font-weight: 400; }
+.pv-note { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.pv-note b { color: var(--brand-dark); }
+/* results table */
+table.restable { width: 100%; border-collapse: separate; border-spacing: 0;
+                 margin-top: 8px; font-size: 14.5px; min-width: 720px; }
+table.restable th, table.restable td {
+  border-bottom: 1px solid var(--line);
+  padding: 11px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+table.restable thead th {
+  color: #fff; background: linear-gradient(180deg, #0ea5e9, var(--brand));
+  font-weight: 700; font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px;
+}
+table.restable thead th:first-child { border-radius: 10px 0 0 0; }
+table.restable thead th:last-child { border-radius: 0 10px 0 0; }
+table.restable tbody tr:nth-child(even) { background: #f8fafc; }
+table.restable tbody tr:hover { background: #f0f9ff; }
+table.restable td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+table.restable td.num .hi { color: #dc2626; }
+table.restable td.num .lo { color: var(--ok); }
+.dlgroup { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.btn-sm.dl { background: #fff; color: var(--brand-dark);
+             border: 1.5px solid #bae6fd; box-shadow: none; }
+.btn-sm.dl:hover { background: var(--brand-soft); }
+.twrap.restablewrap { border: 1px solid var(--line); border-radius: 12px; padding: 0 4px 4px; }
+@media (max-width: 900px) {
+  .statrow, .pv-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .statrow, .pv-grid { grid-template-columns: 1fr; }
+}
 /* ---------- mobile ---------- */
 @media (max-width: 640px) {
   body { font-size: 15px; }
@@ -328,7 +400,8 @@ table.admin input[type=number] { width: 76px; margin: 0; padding: 8px 10px; font
 """
 
 
-def _page(title: str, body: str, right: str = "") -> str:
+def _page(title: str, body: str, right: str = "", wide: bool = False) -> str:
+    wrap_cls = "wrap wide" if wide else "wrap"
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -340,7 +413,7 @@ def _page(title: str, body: str, right: str = "") -> str:
 <div class="hbrand"><b>NAK AI Detector</b><span>Own model &middot; Honest results</span></div>
 <div class="hnav">{right}</div>
 </div></header>
-<main class="wrap">{body}</main>
+<main class="{wrap_cls}">{body}</main>
 <footer class="sitefoot">NAK AI Detector &mdash; own model, honest results.<br>
 <span style="font-size:11.5px">Reports auto-delete 30 minutes after scanning.</span></footer>
 </body></html>"""
@@ -515,6 +588,8 @@ def dashboard(user: dict, error: str = "") -> str:
 <span class="muted">.txt / .pdf / .docx &mdash; up to 100MB</span></span></label>
 <input type="file" id="file" class="filehidden" accept=".txt,.pdf,.doc,.docx">
 <div class="filename" id="filename"></div>
+<div class="preview" id="preview" style="display:none"></div>
+<div class="err" id="previewerr"></div>
 <label class="check"><input type="checkbox" id="opt_repo" name="store_repo">
 <span>Save to document repository<em>Default off &mdash; with this off, re-scanning the same file never self-matches.</em></span></label>
 <label class="check"><input type="checkbox" id="opt_bib" name="exclude_bibliography">
@@ -529,13 +604,19 @@ def dashboard(user: dict, error: str = "") -> str:
 <select id="opt_small_mode" aria-label="Threshold unit"><option value="words" selected>words</option><option value="percentage">percentage</option></select></div>
 <p class="opt-note">Note: AI detection needs at least <b>300 words</b> of prose for a
 reliable score &mdash; shorter texts show a low-confidence notice.</p>
-<div class="row"><button id="scanbtn" onclick="scan()">Upload &amp; scan</button></div>
+<div class="row"><button id="scanbtn" onclick="scan()" disabled>Upload &amp; scan</button></div>
+<p class="muted small" id="scanbtnnote">Select a file first &mdash; a preview with its word
+count appears above, then Submit activates. 1 credit per completed scan.</p>
 <div class="err" id="scanerr"></div><div class="ok" id="scanok" style="display:none"></div>
 </div>
 <div class="card">
 <h2>Recent scans</h2>
 <p class="lede">History auto-deletes 30 minutes after each scan.</p>
 <div id="histwrap"><p class="muted">Loading…</p></div>
+<p class="muted small" style="margin-top:10px">Downloads use the app's existing
+report files (AI report PDF, Similarity report PDF, full report) &mdash; the
+report content itself is unchanged. This app has no DOCX report download;
+adding one would mean new report-generation code, so none was added.</p>
 </div>
 <div class="card">
 <h2>Check text</h2>
@@ -580,9 +661,56 @@ created. Contact the admin if you need it again &mdash; keys are never shown her
 const ta = document.getElementById('text');
 ta.addEventListener('input', () => { document.getElementById('count').textContent = ta.value.length + ' chars'; });
 const fi = document.getElementById('file');
-fi.addEventListener('change', () => {
+const scanbtn = document.getElementById('scanbtn');
+const previewEl = document.getElementById('preview');
+const previewErr = document.getElementById('previewerr');
+function resetPreview(msg) {
+  previewEl.style.display = 'none'; previewEl.innerHTML = '';
+  scanbtn.disabled = true;
+  if (msg !== undefined) { previewErr.textContent = msg; previewErr.style.display = msg ? 'block' : 'none'; }
+}
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(2) + ' MB';
+}
+fi.addEventListener('change', async () => {
+  const f = fi.files[0];
   document.getElementById('filename').textContent =
-    fi.files.length ? 'Selected: ' + fi.files[0].name : '';
+    f ? 'Selected: ' + f.name : '';
+  if (!f) { resetPreview(''); return; }
+  const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+  if (['.txt', '.pdf', '.doc', '.docx'].indexOf(ext) === -1) {
+    resetPreview('Unsupported file type. Only .txt, .pdf, .doc and .docx are accepted.');
+    return;
+  }
+  if (f.size > 100 * 1024 * 1024) {
+    resetPreview('File too large — max 100MB per file.');
+    return;
+  }
+  previewErr.style.display = 'none';
+  previewEl.innerHTML = '<p class="muted small">Reading file…</p>';
+  previewEl.style.display = 'block';
+  scanbtn.disabled = true;
+  try {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await fetch('/api/preview', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { resetPreview(d.error || 'Could not read this file.'); return; }
+    previewEl.innerHTML =
+      '<h3><span class="oktick">✓</span> Ready to scan — file preview</h3>' +
+      '<div class="pv-file">' + esc(d.filename) +
+      ' <span class="muted">(' + esc(d.ext.toUpperCase().slice(1)) + ' · ' + fmtSize(d.size_bytes) + ')</span></div>' +
+      '<div class="pv-grid">' +
+      '<div class="pv-stat"><b>' + d.words.toLocaleString() + '</b><span>Words</span></div>' +
+      '<div class="pv-stat"><b>' + d.chars.toLocaleString() + '</b><span>Characters</span></div>' +
+      '<div class="pv-stat"><b>' + d.pages.toLocaleString() + (d.pages_estimated ? ' *' : '') + '</b><span>Pages' + (d.pages_estimated ? ' (est.)' : '') + '</span></div>' +
+      '</div>' +
+      '<p class="pv-note">Word / character counts come from the document text itself. ' +
+      (d.pages_estimated ? '* Page count estimated at 500 words per page (PDFs show the real page count). ' : '') +
+      'Press <b>Upload &amp; scan</b> to submit — <b>1 credit</b> is charged only for a completed scan.</p>';
+    scanbtn.disabled = false;
+  } catch (e) { resetPreview('Network error. Please try again.'); }
 });
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 async function loadHistory(){
@@ -595,14 +723,18 @@ async function loadHistory(){
       w.innerHTML = '<p class="muted">No scans yet &mdash; upload a document to get started.</p>';
       return;
     }
-    let h = '<div class="twrap"><table class="admin hist"><thead><tr><th>S.No</th><th>File name</th><th>AI %</th><th>Plagiarism %</th><th>AI PDF</th><th>Plag PDF</th></tr></thead><tbody>';
+    let h = '<div class="twrap restablewrap"><table class="restable"><thead><tr><th>S.No</th><th>File name</th><th>AI %</th><th>Plagiarism %</th><th>Download</th></tr></thead><tbody>';
     d.scans.forEach(function(s, i){
+      const ai = Number(s.ai_pct), sim = Number(s.sim_pct);
       h += '<tr><td data-label="S.No">' + (i+1) + '</td>'
         + '<td data-label="File name"><b>' + esc(s.filename) + '</b><br><span class="muted small">' + esc(s.created_at || '') + '</span></td>'
-        + '<td data-label="AI %">' + Number(s.ai_pct).toFixed(1) + '%</td>'
-        + '<td data-label="Plagiarism %">' + Number(s.sim_pct).toFixed(1) + '%</td>'
-        + '<td data-label="AI PDF"><a class="btn btn-sm ghost" href="' + esc(s.ai_pdf_url) + '">&#8681; AI</a></td>'
-        + '<td data-label="Plag PDF"><a class="btn btn-sm ghost" href="' + esc(s.plag_pdf_url) + '">&#8681; Plag</a></td></tr>';
+        + '<td data-label="AI %" class="num"><span class="' + (ai >= 50 ? 'hi' : 'lo') + '">' + ai.toFixed(1) + '%</span></td>'
+        + '<td data-label="Plagiarism %" class="num"><span class="' + (sim >= 50 ? 'hi' : 'lo') + '">' + sim.toFixed(1) + '%</span></td>'
+        + '<td data-label="Download"><span class="dlgroup">'
+        + '<a class="btn btn-sm dl" href="' + esc(s.ai_pdf_url) + '">&#8681; PDF (AI)</a>'
+        + '<a class="btn btn-sm dl" href="' + esc(s.plag_pdf_url) + '">&#8681; PDF (Plag)</a>'
+        + '<a class="btn btn-sm dl" href="/report/' + esc(s.scan_id) + '">Report</a>'
+        + '</span></td></tr>';
     });
     h += '</tbody></table></div>';
     w.innerHTML = h;
@@ -669,6 +801,11 @@ async function scan(){
       ' (' + d.word_count.toLocaleString() + ' words). <a href="' + d.report_url +
       '">Open full report</a>';
     ok.style.display = 'block';
+    // Fresh preview required for any re-scan, so a second submit can never
+    // silently re-charge for the same file without a new preview.
+    fi.value = '';
+    document.getElementById('filename').textContent = '';
+    resetPreview('');
     loadHistory();
   } catch (e) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
   btn.disabled = false; btn.textContent = 'Upload & scan';
@@ -710,7 +847,7 @@ async function codecheck(){
   btn.disabled = false; btn.textContent = 'Check code';
 }
 </script>"""
-    return _page("Dashboard", head + script, right)
+    return _page("Dashboard", head + script, right, wide=True)
 
 
 def admin_login(error: str = "", misconfigured: bool = False) -> str:
@@ -906,6 +1043,8 @@ New scans are <b>not</b> stored unless the client ticks "Save to document reposi
 <span class="muted">.txt / .pdf / .docx &mdash; up to 100MB</span></span></label>
 <input type="file" id="afile" class="filehidden" accept=".txt,.pdf,.doc,.docx">
 <div class="filename" id="afilename"></div>
+<div class="preview" id="apreview" style="display:none"></div>
+<div class="err" id="apreviewerr"></div>
 <label class="check"><input type="checkbox" id="aopt_repo" name="store_repo">
 <span>Save to document repository<em>Default off &mdash; with this off, re-scanning the same file never self-matches.</em></span></label>
 <label class="check"><input type="checkbox" id="aopt_bib" name="exclude_bibliography">
@@ -920,8 +1059,18 @@ New scans are <b>not</b> stored unless the client ticks "Save to document reposi
 <select id="aopt_small_mode" aria-label="Threshold unit"><option value="words" selected>words</option><option value="percentage">percentage</option></select></div>
 <p class="opt-note">Note: AI detection needs at least <b>300 words</b> of prose for a
 reliable score &mdash; shorter texts show a low-confidence notice.</p>
-<div class="row"><button id="ascanbtn" onclick="ascan()">Upload &amp; scan</button></div>
+<div class="row"><button id="ascanbtn" onclick="ascan()" disabled>Upload &amp; scan</button></div>
+<p class="muted small">Select a file first &mdash; a preview with its word count
+appears above, then Submit activates. Admin scans are free.</p>
 <div class="err" id="ascanerr"></div><div class="ok" id="ascanok" style="display:none"></div>
+</div>
+<div class="card">
+<h2>All scans</h2>
+<p class="lede">Every client's scans, newest first. History auto-deletes 30 minutes after each scan.</p>
+<div id="ahistwrap"><p class="muted">Loading…</p></div>
+<p class="muted small" style="margin-top:10px">Downloads use the app's existing
+report files (AI report PDF, Similarity report PDF, full report) &mdash; the
+report content itself is unchanged.</p>
 </div>
 <div class="card">
 <h2>Check text</h2>
@@ -956,17 +1105,96 @@ no AI score (similarity still runs). Per-scan <b>ai_min_words</b> API param over
 <div class="row"><button type="submit">Create account</button></div>
 </form>
 <p class="muted" style="margin-top:10px">The client's API key is shown once after creation &mdash; copy it for them.</p>
-</div>{repo_html}""" + _ASCAN_SCRIPT, right)
+</div>{repo_html}""" + _ASCAN_SCRIPT, right, wide=True)
 
 
 # Admin scan JS: plain (non-f) string so the JS braces don't need escaping.
 _ASCAN_SCRIPT = """
 <script>
 const afi = document.getElementById('afile');
-afi.addEventListener('change', () => {
+const ascanbtn = document.getElementById('ascanbtn');
+const apreviewEl = document.getElementById('apreview');
+const apreviewErr = document.getElementById('apreviewerr');
+function aesc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function afmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(2) + ' MB';
+}
+function aresetPreview(msg) {
+  apreviewEl.style.display = 'none'; apreviewEl.innerHTML = '';
+  ascanbtn.disabled = true;
+  if (msg !== undefined) { apreviewErr.textContent = msg; apreviewErr.style.display = msg ? 'block' : 'none'; }
+}
+afi.addEventListener('change', async () => {
+  const f = afi.files[0];
   document.getElementById('afilename').textContent =
-    afi.files.length ? 'Selected: ' + afi.files[0].name : '';
+    f ? 'Selected: ' + f.name : '';
+  if (!f) { aresetPreview(''); return; }
+  const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+  if (['.txt', '.pdf', '.doc', '.docx'].indexOf(ext) === -1) {
+    aresetPreview('Unsupported file type. Only .txt, .pdf, .doc and .docx are accepted.');
+    return;
+  }
+  if (f.size > 100 * 1024 * 1024) {
+    aresetPreview('File too large — max 100MB per file.');
+    return;
+  }
+  apreviewErr.style.display = 'none';
+  apreviewEl.innerHTML = '<p class="muted small">Reading file…</p>';
+  apreviewEl.style.display = 'block';
+  ascanbtn.disabled = true;
+  try {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await fetch('/api/preview', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { aresetPreview(d.error || 'Could not read this file.'); return; }
+    apreviewEl.innerHTML =
+      '<h3><span class="oktick">✓</span> Ready to scan — file preview</h3>' +
+      '<div class="pv-file">' + aesc(d.filename) +
+      ' <span class="muted">(' + aesc(d.ext.toUpperCase().slice(1)) + ' · ' + afmtSize(d.size_bytes) + ')</span></div>' +
+      '<div class="pv-grid">' +
+      '<div class="pv-stat"><b>' + d.words.toLocaleString() + '</b><span>Words</span></div>' +
+      '<div class="pv-stat"><b>' + d.chars.toLocaleString() + '</b><span>Characters</span></div>' +
+      '<div class="pv-stat"><b>' + d.pages.toLocaleString() + (d.pages_estimated ? ' *' : '') + '</b><span>Pages' + (d.pages_estimated ? ' (est.)' : '') + '</span></div>' +
+      '</div>' +
+      '<p class="pv-note">Word / character counts come from the document text itself. ' +
+      (d.pages_estimated ? '* Page count estimated at 500 words per page (PDFs show the real page count). ' : '') +
+      'Admin scans are free.</p>';
+    ascanbtn.disabled = false;
+  } catch (e) { aresetPreview('Network error. Please try again.'); }
 });
+async function loadAdminHistory(){
+  const w = document.getElementById('ahistwrap');
+  if (!w) return;
+  try {
+    const r = await fetch('/api/admin/history');
+    const d = await r.json();
+    if (!r.ok || !d.scans || !d.scans.length) {
+      w.innerHTML = '<p class="muted">No scans yet.</p>';
+      return;
+    }
+    let h = '<div class="twrap restablewrap"><table class="restable"><thead><tr><th>S.No</th><th>Client</th><th>File name</th><th>AI %</th><th>Plagiarism %</th><th>Download</th></tr></thead><tbody>';
+    d.scans.forEach(function(s, i){
+      const ai = Number(s.ai_pct), sim = Number(s.sim_pct);
+      h += '<tr><td data-label="S.No">' + (i+1) + '</td>'
+        + '<td data-label="Client"><b>' + aesc(s.owner) + '</b></td>'
+        + '<td data-label="File name"><b>' + aesc(s.filename) + '</b><br><span class="muted small">' + aesc(s.created_at || '') + '</span></td>'
+        + '<td data-label="AI %" class="num"><span class="' + (ai >= 50 ? 'hi' : 'lo') + '">' + ai.toFixed(1) + '%</span></td>'
+        + '<td data-label="Plagiarism %" class="num"><span class="' + (sim >= 50 ? 'hi' : 'lo') + '">' + sim.toFixed(1) + '%</span></td>'
+        + '<td data-label="Download"><span class="dlgroup">'
+        + '<a class="btn btn-sm dl" href="' + aesc(s.ai_pdf_url) + '">&#8681; PDF (AI)</a>'
+        + '<a class="btn btn-sm dl" href="' + aesc(s.plag_pdf_url) + '">&#8681; PDF (Plag)</a>'
+        + '<a class="btn btn-sm dl" href="/report/' + aesc(s.scan_id) + '">Report</a>'
+        + '</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+    w.innerHTML = h;
+  } catch (e) {
+    w.innerHTML = '<p class="muted">Could not load history.</p>';
+  }
+}
+loadAdminHistory();
 async function ascan(){
   const f = afi.files[0];
   const err = document.getElementById('ascanerr');
@@ -995,6 +1223,11 @@ async function ascan(){
       ' (' + d.word_count.toLocaleString() + ' words). <a href="' + d.report_url +
       '">Open full report</a>';
     ok.style.display = 'block';
+    // Fresh preview required for any re-scan.
+    afi.value = '';
+    document.getElementById('afilename').textContent = '';
+    aresetPreview('');
+    loadAdminHistory();
   } catch (e) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
   btn.disabled = false; btn.textContent = 'Upload & scan';
 }
