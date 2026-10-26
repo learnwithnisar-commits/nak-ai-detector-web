@@ -40,7 +40,12 @@ from fastapi.responses import (
 
 from app import codecheck as codecheckmod, pages, plag as plagmod, store
 from app.parse import ALLOWED_EXTS, parse_document
-from app.scan import assemble_report, count_words, make_submission_id
+from app.scan import (
+    WORDS_PER_PAGE_ESTIMATE,
+    assemble_report,
+    count_words,
+    make_submission_id,
+)
 from src.features import extract_features_unscaled
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -744,6 +749,119 @@ def api_history(request: Request):
             "plag_percentage": sim_pct,
             "sim_pct": sim_pct,
             "created_at": created,
+            "ai_pdf_url": f"/report/{s['scan_id']}/pdf/ai",
+            "plag_pdf_url": f"/report/{s['scan_id']}/pdf/similarity",
+        })
+    return {"scans": out}
+
+
+@app.post("/api/preview")
+async def api_preview(request: Request):
+    """Read-only upload preview for the dashboard: file name/type/size plus
+    word count, character count and page count, computed with the app's own
+    parsers (app.parse) — the same units the scan path counts. No credit is
+    charged, no scan is recorded, and the raw upload is deleted immediately
+    after parsing. Session clients and admins only (no service-key quota
+    side effects)."""
+    user, _is_admin = get_requester(request)
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "authentication required - log in"},
+        )
+    if user.get("suspended"):
+        return JSONResponse(status_code=403, content={"error": "account suspended"})
+    preview_id = secrets.token_urlsafe(12)
+    raw_path = TMP_DIR / f"preview-{preview_id}.bin"
+    try:
+        size, filename, _fields = await _save_upload_streaming(request, raw_path)
+    except _TooLarge:
+        raw_path.unlink(missing_ok=True)
+        return JSONResponse(
+            status_code=413, content={"error": "File too large - max 100MB per file."}
+        )
+    except ValueError as e:
+        raw_path.unlink(missing_ok=True)
+        return JSONResponse(status_code=422, content={"error": str(e)})
+    try:
+        filename = _safe_filename(filename)
+        ext = Path(filename).suffix.lower()
+        if ext not in ALLOWED_EXTS:
+            return JSONResponse(
+                status_code=422,
+                content={"error": "Only .txt, .pdf, .doc and .docx files are accepted."},
+            )
+
+        def _parse():
+            pages = None
+            if ext == ".pdf":
+                # Real page count for PDFs, exactly as the scan path does.
+                from pypdf import PdfReader
+
+                with open(raw_path, "rb") as _f:
+                    pages = max(1, len(PdfReader(_f).pages))
+            words = 0
+            chars = 0
+            for unit in parse_document(raw_path, ext):
+                t = unit.get("text", "") or ""
+                words += count_words(t)
+                chars += len(t)
+            return words, chars, pages
+
+        words, chars, pages = await asyncio.to_thread(_parse)
+        if words == 0:
+            return JSONResponse(
+                status_code=422, content={"error": "no readable text found in file"}
+            )
+        pages_estimated = pages is None
+        if pages_estimated:
+            # Same 500-words-per-page estimate the scan path uses for
+            # non-PDF documents (scan.WORDS_PER_PAGE_ESTIMATE).
+            pages = max(1, -(-words // WORDS_PER_PAGE_ESTIMATE))
+        return {
+            "filename": filename,
+            "ext": ext,
+            "size_bytes": size,
+            "words": words,
+            "chars": chars,
+            "pages": pages,
+            "pages_estimated": pages_estimated,
+        }
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={"error": str(e)})
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": "could not read file"})
+    finally:
+        raw_path.unlink(missing_ok=True)
+
+
+@app.get("/api/admin/history")
+def api_admin_history(request: Request):
+    """All recent scans for the admin panel (admin session only), newest
+    first, with the same download links as /api/history plus the owner."""
+    if not get_admin(request):
+        return JSONResponse(status_code=403, content={"error": "admin only"})
+    import datetime as _dt
+
+    scans = store.list_all_scans(DB_PATH, limit=100)
+    out = []
+    for i, s in enumerate(scans, start=1):
+        ai_pct = float(s["ai_pct"] or 0.0)
+        sim_pct = float(s.get("sim_pct") or 0.0)
+        created = _dt.datetime.fromtimestamp(
+            s["created_at"], _dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        out.append({
+            "s_no": i,
+            "scan_id": s["scan_id"],
+            "owner": s["owner"],
+            "file_name": s["filename"],
+            "filename": s["filename"],
+            "ai_percentage": ai_pct,
+            "ai_pct": ai_pct,
+            "plag_percentage": sim_pct,
+            "sim_pct": sim_pct,
+            "created_at": created,
+            "report_url": f"/report/{s['scan_id']}",
             "ai_pdf_url": f"/report/{s['scan_id']}/pdf/ai",
             "plag_pdf_url": f"/report/{s['scan_id']}/pdf/similarity",
         })
